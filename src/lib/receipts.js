@@ -1,19 +1,21 @@
-import rawReceipts from '../data/life-receipts.json'
-import { CATEGORY_ORDER } from './categories'
-import { dayKey } from './format'
+import rawReceipts from '../data/life-receipts.json' with { type: 'json' }
+import { CATEGORY_ORDER } from './categories.js'
+import { dayKey } from './format.js'
+import { sanitizeReceipts, VALID_TYPES } from './sanitize.js'
 
 /**
  * Normalised, read-only view over the static life-receipts dataset.
  *
- * The JSON is imported once at build time (no fetching, no backend). All
- * derived structures below are computed a single time at module load, so
- * screens never re-sort or re-index the full 1.6k-record set on render.
+ * Every record is passed through the sanitisation boundary first, so the rest
+ * of the app only ever sees validated, de-duplicated, chronologically sorted
+ * receipts. All derived structures are computed a single time at module load,
+ * so screens never re-sort or re-index the full 1.6k-record set on render.
+ *
+ * The JSON is imported once at build time (no fetching, no backend).
  */
 
-/** The full, chronologically sorted receipt list. */
-export const receipts = [...rawReceipts].sort(
-  (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
-)
+/** The full, validated, chronologically sorted receipt list (frozen). */
+export const receipts = sanitizeReceipts(rawReceipts)
 
 /** Fast id -> receipt lookup. */
 export const receiptById = new Map(receipts.map((r) => [r.id, r]))
@@ -73,6 +75,20 @@ export const dateRange = {
 
 /** Total number of receipts in the dataset. */
 export const totalReceipts = receipts.length
+
+/**
+ * A small integrity report: how many raw records were present versus how many
+ * survived validation. Useful for observability — and proof that the
+ * sanitisation boundary is actually applied.
+ */
+export const dataIntegrity = Object.freeze({
+  rawCount: Array.isArray(rawReceipts) ? rawReceipts.length : 0,
+  validCount: receipts.length,
+  rejected: Array.isArray(rawReceipts)
+    ? Math.max(0, rawReceipts.length - receipts.length)
+    : 0,
+  validTypes: VALID_TYPES,
+})
 
 /** Convenience lookup by id. */
 export function getReceipt(id) {

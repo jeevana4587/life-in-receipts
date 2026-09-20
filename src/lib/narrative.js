@@ -1,15 +1,12 @@
-import { getCategoryLabel } from './categories'
-import {
-  clusterSpanMinutes,
-  getConnections,
-} from './storyEngine'
+import { getCategoryLabel } from './categories.js'
+import { clusterSpanMinutes, getConnections } from './storyEngine.js'
 import {
   formatDateRange,
   formatLongDate,
   formatTime,
   humanizeGapMinutes,
   partOfDay,
-} from './format'
+} from './format.js'
 
 /**
  * Narrative synthesis — turns a cluster of receipts into a short, readable

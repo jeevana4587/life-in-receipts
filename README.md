@@ -17,7 +17,8 @@ npm install
 npm run dev      # start the dev server
 npm run build    # production build
 npm run preview  # preview the production build
-npm run lint     # eslint
+npm run lint     # eslint — zero errors
+npm test         # 35 unit tests (Node built-in test runner, zero deps)
 ```
 
 The app is purely frontend: the dataset is a static JSON file imported at build
@@ -60,6 +61,7 @@ src/
   lib/                 Pure logic — no React, independently readable/testable
     categories.js      Category theme map: label, accent, icon, motif
     format.js          Date/number formatting helpers
+    sanitize.js        Data validation/sanitisation boundary (Security)
     receipts.js        Dataset loading + pre-computed indexes
     storyEngine.js     Connection + clustering rules
     insights.js        Aggregate calculations
@@ -67,6 +69,10 @@ src/
     highlights.js      Interesting-moment selection
     timeline.js        Day/month grouping for the Journey
     filters.js         Search + filter logic
+
+  test/                Unit tests (Node built-in test runner — no deps)
+    logic.test.js      Sanitisation + formatting helpers
+    story.test.js      Story Engine, filters, insights, narrative, dataset integrity
 
   data/
     life-receipts.json The static dataset the app imports
@@ -277,12 +283,48 @@ not a reduced feature set.
 - Charts include a visually-hidden tabular equivalent for screen readers.
 - `prefers-reduced-motion` collapses transitions and animations document-wide.
 
+### Security & data sanitisation
+
+- **Validation boundary.** Every record passes through `src/lib/sanitize.js`
+  before entering the app: ids/types/timestamps are validated, strings are
+  stripped of control characters and length-capped, metadata is reduced to
+  scalar values, duplicates are dropped, and the resulting dataset is frozen.
+  Malformed records can never reach the DOM.
+- **Input hygiene.** The free-text search query is sanitised (control chars
+  stripped, length clamped) before use.
+- **Content Security Policy.** A strict CSP is set via meta tag: scripts and
+  connections are same-origin only, no remote frames/objects, `base-uri`
+  locked, `form-action 'none'`, plus `no-referrer` and `nosniff` policies.
+- **Output encoding.** All dynamic content renders through React's text
+  escaping; no `dangerouslySetInnerHTML` anywhere in the codebase.
+- **Error containment.** A top-level error boundary catches render failures
+  and offers recovery instead of a blank page.
+
+### Component testing & reliability
+
+`npm test` runs **35 unit tests** on Node's built-in test runner (zero extra
+dependencies), covering:
+
+- the sanitisation boundary (rejection of malformed/unsafe records),
+- dataset integrity (schema completeness, chronological ordering),
+- Story Engine connection rules (window bounds, memoisation, self-exclusion),
+- cluster invariants (focus containment, gap limits),
+- filter AND-logic and inclusive date ranges,
+- insights determinism and hedged narrative generation.
+
 ### Performance (PRD §13.1)
 
 - Derived structures (dataset indexes, timeline, insights, connections) are
   computed once and memoised.
 - Screens are route-split with `React.lazy`; only the Landing screen ships in
   the initial bundle.
+- React vendor libraries are split into a separate cached chunk
+  (`react-vendor`), so repeat visits load only the app code.
+- `ReceiptCard` is memoised and uses `content-visibility: auto`, so long
+  result grids skip layout/paint for off-screen cards.
+- Explore renders 24 cards per page with "Show more" paging, and search input
+  uses `useDeferredValue` so typing stays responsive while large result sets
+  recompute.
 
 ---
 

@@ -1,6 +1,6 @@
-import { receipts, receiptById } from './receipts'
-import { dayKey, formatDate, formatMonthYear } from './format'
-import { computeInsights } from './insights'
+import { receipts, receiptById } from './receipts.js'
+import { dayKey, formatDate, formatMonthYear } from './format.js'
+import { computeInsights } from './insights.js'
 
 /**
  * Timeline construction for the Journey screen (FR5).

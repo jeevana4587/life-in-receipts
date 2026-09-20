@@ -1,5 +1,5 @@
-import { receipts } from './receipts'
-import { dayKey } from './format'
+import { receipts } from './receipts.js'
+import { dayKey } from './format.js'
 
 /**
  * Search and filter logic (FR2). Pure functions over the dataset so the same

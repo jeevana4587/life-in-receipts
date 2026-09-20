@@ -1,6 +1,6 @@
-import { getConnections } from './storyEngine'
-import { computeInsights } from './insights'
-import { dayKey } from './format'
+import { getConnections } from './storyEngine.js'
+import { computeInsights } from './insights.js'
+import { dayKey } from './format.js'
 
 /**
  * Highlight selection — picks receipts that are genuinely worth starting

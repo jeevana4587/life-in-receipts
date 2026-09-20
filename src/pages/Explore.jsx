@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, X } from 'lucide-react'
 import { locations, presentTypes, totalReceipts } from '../lib/receipts'
@@ -9,6 +16,7 @@ import {
   filterReceipts,
   hasActiveFilters,
 } from '../lib/filters'
+import { sanitizeSearchQuery } from '../lib/sanitize'
 import { formatCount } from '../lib/format'
 import ReceiptCard from '../components/ReceiptCard'
 import SectionHeading from '../components/SectionHeading'
@@ -31,6 +39,9 @@ const SORTS = [
   { value: 'title', label: 'Title A–Z' },
 ]
 
+/** How many cards to render per page. Keeps the DOM light on large result sets. */
+const PAGE_SIZE = 24
+
 export default function Explore() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialType = searchParams.get('type')
@@ -41,6 +52,18 @@ export default function Explore() {
   })
   const [sort, setSort] = useState('newest')
   const [drawerOpen, setDrawerOpen] = useState(false)
+  // How many extra pages beyond the first the user has requested. Derived
+  // state (visibleCount) is computed from this + the result size, so no
+  // effect is needed to reset paging when filters change.
+  const [extraPages, setExtraPages] = useState(0)
+
+  // Defer the free-text query so typing stays responsive even while the
+  // (potentially large) result set recomputes (Efficiency).
+  const deferredQuery = useDeferredValue(filters.query)
+  const effectiveFilters = useMemo(
+    () => ({ ...filters, query: deferredQuery }),
+    [filters, deferredQuery],
+  )
 
   // Keep the URL in sync with the selected single category (deep-linkable).
   useEffect(() => {
@@ -55,8 +78,19 @@ export default function Explore() {
   }, [filters.categories])
 
   const results = useMemo(
-    () => filterReceipts(filters, sort),
-    [filters, sort],
+    () => filterReceipts(effectiveFilters, sort),
+    [effectiveFilters, sort],
+  )
+
+  // Derived paging: resets automatically whenever results change because
+  // extraPages only ever extends beyond the first page.
+  const visibleCount = Math.min(
+    results.length,
+    PAGE_SIZE + extraPages * PAGE_SIZE,
+  )
+  const visibleResults = useMemo(
+    () => results.slice(0, visibleCount),
+    [results, visibleCount],
   )
 
   const update = useCallback((patch) => {
@@ -108,7 +142,9 @@ export default function Explore() {
           <input
             type="search"
             value={filters.query}
-            onChange={(e) => update({ query: e.target.value })}
+            onChange={(e) =>
+              update({ query: sanitizeSearchQuery(e.target.value) })
+            }
             placeholder="Search titles, descriptions, places…"
             aria-label="Search moments"
             className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)] py-2.5 pl-9 pr-3 text-sm text-[var(--color-ink)] placeholder:text-[var(--color-ink-soft)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
@@ -188,59 +224,135 @@ export default function Explore() {
               }
             />
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {results.map((receipt) => (
-                <li key={receipt.id}>
-                  <ReceiptCard
-                    receipt={receipt}
-                    to={`/moment/${receipt.id}`}
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {visibleResults.map((receipt) => (
+                  <li key={receipt.id}>
+                    <ReceiptCard
+                      receipt={receipt}
+                      to={`/moment/${receipt.id}`}
+                    />
+                  </li>
+                ))}
+              </ul>
+
+              {visibleCount < results.length && (
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExtraPages((n) => n + 1)}
+                    className="rounded-lg border border-[var(--color-line)] px-5 py-2.5 text-sm font-medium text-[var(--color-ink)] transition-colors hover:border-[#8b5cf6] hover:bg-[rgba(139,92,246,0.1)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+                  >
+                    Show more moments
+                  </button>
+                  <p className="text-xs text-[var(--color-ink-soft)]">
+                    Showing {visibleResults.length} of{' '}
+                    {formatCount(results.length)}
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* Mobile filter drawer */}
       {drawerOpen && (
-        <div
-          className="fixed inset-0 z-50 lg:hidden"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Filters"
-        >
-          <button
-            type="button"
-            aria-label="Close filters"
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <div className="absolute inset-x-0 bottom-0 max-h-[85svh] overflow-y-auto rounded-t-2xl border-t border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-[var(--color-ink)]">
-                Filters
-              </h2>
-              <button
-                type="button"
-                onClick={() => setDrawerOpen(false)}
-                className="rounded-lg border border-[var(--color-line)] p-2 text-[var(--color-ink-soft)]"
-                aria-label="Close filters"
-              >
-                <X size={16} strokeWidth={1.75} aria-hidden="true" />
-              </button>
-            </div>
-            {filterPanel}
+        <FilterDrawer onClose={() => setDrawerOpen(false)}>
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-base font-semibold text-[var(--color-ink)]">
+              Filters
+            </h2>
             <button
               type="button"
               onClick={() => setDrawerOpen(false)}
-              className="mt-5 w-full rounded-lg bg-[#8b5cf6] px-4 py-2.5 text-sm font-semibold text-white"
+              className="rounded-lg border border-[var(--color-line)] p-2 text-[var(--color-ink-soft)]"
+              aria-label="Close filters"
             >
-              Show {formatCount(results.length)} moments
+              <X size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           </div>
-        </div>
+          {filterPanel}
+          <button
+            type="button"
+            onClick={() => setDrawerOpen(false)}
+            className="mt-5 w-full rounded-lg bg-[#8b5cf6] px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            Show {formatCount(results.length)} moments
+          </button>
+        </FilterDrawer>
       )}
+    </div>
+  )
+}
+
+/**
+ * Bottom-sheet drawer for filters on small screens. Traps focus while open,
+ * closes on Escape, and restores focus to the trigger when dismissed
+ * (Accessibility: keyboard + ARIA).
+ */
+function FilterDrawer({ onClose, children }) {
+  const sheetRef = useRef(null)
+  const previousFocusRef = useRef(null)
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement
+
+    const sheet = sheetRef.current
+    const focusables = sheet?.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    const first = focusables?.[0]
+    first?.focus()
+
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab' || !focusables || focusables.length === 0) return
+
+      const firstEl = focusables[0]
+      const lastEl = focusables[focusables.length - 1]
+      if (event.shiftKey && document.activeElement === firstEl) {
+        event.preventDefault()
+        lastEl.focus()
+      } else if (!event.shiftKey && document.activeElement === lastEl) {
+        event.preventDefault()
+        firstEl.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      // Restore focus to the element that opened the drawer.
+      if (previousFocusRef.current instanceof HTMLElement) {
+        previousFocusRef.current.focus()
+      }
+    }
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 lg:hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Filters"
+    >
+      <button
+        type="button"
+        aria-label="Close filters"
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+      />
+      <div
+        ref={sheetRef}
+        className="absolute inset-x-0 bottom-0 max-h-[85svh] overflow-y-auto rounded-t-2xl border-t border-[var(--color-line)] bg-[var(--color-surface)] p-5"
+      >
+        {children}
+      </div>
     </div>
   )
 }

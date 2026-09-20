@@ -4,8 +4,8 @@ import {
   receiptsByDay,
   receiptsByLocation,
   locationKey,
-} from './receipts'
-import { dayKey, humanizeGapMinutes, minutesBetween } from './format'
+} from './receipts.js'
+import { dayKey, humanizeGapMinutes, minutesBetween } from './format.js'
 
 /**
  * Story Engine — connection and clustering logic.

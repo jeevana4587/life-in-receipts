@@ -1,6 +1,6 @@
-import { receipts, countByType, receiptsByLocation } from './receipts'
-import { getCategoryLabel } from './categories'
-import { dayKey, formatMonthYear, partOfDay } from './format'
+import { receipts, countByType, receiptsByLocation } from './receipts.js'
+import { getCategoryLabel } from './categories.js'
+import { dayKey, formatMonthYear, partOfDay } from './format.js'
 
 /**
  * Insights — deterministic aggregates computed from the dataset (PRD §9.6,

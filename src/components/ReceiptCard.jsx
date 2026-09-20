@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowUpRight } from 'lucide-react'
 import { getCategoryMeta } from '../lib/categories'
@@ -53,7 +54,7 @@ function metaLine(receipt) {
   }
 }
 
-export default function ReceiptCard({
+function ReceiptCardComponent({
   receipt,
   variant = 'default',
   reason = null,
@@ -182,8 +183,12 @@ export default function ReceiptCard({
   )
 
   const base = `group relative block overflow-hidden border bg-[var(--color-surface)] text-left transition-all duration-200 ${padding} ${radius} ${className}`
+  // content-visibility lets the browser skip layout/paint for cards that are
+  // off-screen, which keeps long result grids smooth (Efficiency).
   const style = {
     borderColor: 'var(--color-line)',
+    contentVisibility: 'auto',
+    containIntrinsicSize: focus ? '220px' : '150px',
     ...styleProp,
   }
 
@@ -235,3 +240,11 @@ export default function ReceiptCard({
     </article>
   )
 }
+
+/**
+ * Memoised so a card only re-renders when its own props change. Result grids
+ * can hold hundreds of cards, so this avoids re-rendering the whole list when
+ * one filter or connection changes.
+ */
+const ReceiptCard = memo(ReceiptCardComponent)
+export default ReceiptCard

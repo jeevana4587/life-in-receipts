@@ -8,6 +8,7 @@
     "build": "vite build",
     "prepare-data": "node scripts/prepareData.js",
     "lint": "eslint .",
+    "test": "node --test \"test/*.test.js\"",
     "preview": "vite preview"
   },
   "dependencies": {

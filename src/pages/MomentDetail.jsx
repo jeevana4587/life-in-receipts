@@ -1,12 +1,15 @@
-import { useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
+  ArrowRight,
   BookOpen,
   CalendarDays,
+  Footprints,
   Link2,
   MapPin,
   Share2,
+  X,
 } from 'lucide-react'
 import { getReceipt } from '../lib/receipts'
 import { getCategoryMeta } from '../lib/categories'
@@ -54,14 +57,56 @@ export default function MomentDetail() {
     [cluster],
   )
 
-  // Escape returns to the previous screen, matching detail-panel conventions.
+  // "Walk This Outing": guided stepping through the cluster. The rest of
+  // the interface dims while the walk is active, so only the trail is lit.
+  const [walking, setWalking] = useState(false)
+  const [walkIndex, setWalkIndex] = useState(0)
+  const walkSorted = useMemo(
+    () =>
+      [...cluster].sort(
+        (a, b) => new Date(a.timestamp) - new Date(b.timestamp),
+      ),
+    [cluster],
+  )
+  const walkCurrent = walking ? walkSorted[walkIndex] : null
+
+  const startWalk = useCallback(() => {
+    setWalkIndex(Math.max(0, walkSorted.findIndex((r) => r.id === receipt.id)))
+    setWalking(true)
+  }, [walkSorted, receipt.id])
+
+  const stopWalk = useCallback(() => setWalking(false), [])
+
+  const stepWalk = useCallback(
+    (delta) => {
+      setWalkIndex((i) =>
+        Math.min(walkSorted.length - 1, Math.max(0, i + delta)),
+      )
+    },
+    [walkSorted.length],
+  )
+
+  // Keyboard: arrows step through the walk, Escape exits it.
   useEffect(() => {
+    if (!walking) return undefined
     const onKey = (e) => {
-      if (e.key === 'Escape') navigate(-1)
+      if (e.key === 'Escape') stopWalk()
+      if (e.key === 'ArrowRight') stepWalk(1)
+      if (e.key === 'ArrowLeft') stepWalk(-1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate])
+  }, [walking, stopWalk, stepWalk])
+
+  // Escape returns to the previous screen — but only when the walk overlay
+  // is not open (the walk owns Escape while active).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !walking) navigate(-1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [navigate, walking])
 
   if (!receipt) {
     return (
@@ -84,7 +129,12 @@ export default function MomentDetail() {
   const tight = connections.filter((c) => c.primary.type === 'time')
 
   return (
-    <div className="flex flex-col gap-8 sm:gap-10">
+    <div
+      className={`relative flex flex-col gap-8 transition-opacity duration-300 sm:gap-10 ${
+        walking ? 'opacity-30' : 'opacity-100'
+      }`}
+      aria-hidden={walking ? 'true' : undefined}
+    >
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -144,6 +194,21 @@ export default function MomentDetail() {
                 <BookOpen size={16} strokeWidth={2} aria-hidden="true" />
                 Read this chapter
               </Link>
+            )}
+            {cluster.length > 1 && (
+              <button
+                type="button"
+                onClick={startWalk}
+                className="inline-flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+                style={{
+                  borderColor: 'rgba(52,211,153,0.6)',
+                  backgroundColor: 'rgba(52,211,153,0.12)',
+                  color: '#6ee7b7',
+                }}
+              >
+                <Footprints size={16} strokeWidth={1.75} aria-hidden="true" />
+                Walk This Outing
+              </button>
             )}
             <button
               type="button"
@@ -251,6 +316,113 @@ export default function MomentDetail() {
             </p>
           )}
         </section>
+      )}
+
+      {/* "Walk This Outing" overlay — a guided, dimmed stepping view */}
+      {walking && walkCurrent && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Walking this outing"
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl border bg-[var(--color-surface)] p-6 shadow-2xl"
+            style={{ borderColor: 'rgba(52,211,153,0.5)' }}
+          >
+            <div className="flex items-center justify-between">
+              <p
+                className="font-mono text-[10px] uppercase tracking-[0.25em]"
+                style={{ color: '#6ee7b7' }}
+              >
+                Walk This Outing · step {walkIndex + 1} of{' '}
+                {walkSorted.length}
+              </p>
+              <button
+                type="button"
+                onClick={stopWalk}
+                aria-label="Exit the walk"
+                className="rounded-lg border border-[var(--color-line)] p-2 text-[var(--color-ink-soft)] transition-colors hover:text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <CategoryChip type={walkCurrent.type} size="md" />
+              <h2 className="mt-3 text-xl font-bold text-[var(--color-ink)]">
+                {walkCurrent.title}
+              </h2>
+              <p className="mt-2 font-mono text-xs text-[var(--color-ink-soft)]">
+                {formatDateTime(walkCurrent.timestamp)}
+                {walkCurrent.location ? ` · ${walkCurrent.location}` : ''}
+              </p>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink)]/90">
+                {walkCurrent.description}
+              </p>
+            </div>
+
+            {/* Progress dots along the trail */}
+            <ol
+              className="mt-5 flex items-center gap-1.5"
+              aria-label="Walk progress"
+            >
+              {walkSorted.map((step, i) => (
+                <li
+                  key={step.id}
+                  aria-current={i === walkIndex ? 'step' : undefined}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setWalkIndex(i)}
+                    aria-label={`Step ${i + 1}: ${step.title}`}
+                    className="h-2.5 rounded-full transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+                    style={{
+                      width: i === walkIndex ? 22 : 10,
+                      backgroundColor:
+                        i === walkIndex
+                          ? '#34d399'
+                          : i < walkIndex
+                            ? 'rgba(52,211,153,0.45)'
+                            : 'var(--color-line)',
+                    }}
+                  />
+                </li>
+              ))}
+            </ol>
+
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => stepWalk(-1)}
+                disabled={walkIndex === 0}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] px-3.5 py-2 text-sm font-medium text-[var(--color-ink)] transition-colors hover:border-[#34d399] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+              >
+                <ArrowLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+                Earlier
+              </button>
+
+              {walkIndex < walkSorted.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => stepWalk(1)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#34d399] px-4 py-2 text-sm font-semibold text-[#06281e] transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+                >
+                  Next moment
+                  <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
+                </button>
+              ) : (
+                <Link
+                  to={`/story/${walkCurrent.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#c4b5fd]"
+                >
+                  <BookOpen size={14} strokeWidth={2} aria-hidden="true" />
+                  Read the full chapter
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

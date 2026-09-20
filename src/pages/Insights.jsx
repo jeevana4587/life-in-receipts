@@ -43,15 +43,15 @@ export default function Insights() {
   return (
     <div className="flex flex-col gap-10 sm:gap-12">
       <SectionHeading
-        eyebrow="Computed, not guessed"
-        title="Insights"
-        description={`Patterns from all ${formatCount(
+        eyebrow="The Reflection Room"
+        title="What this year looks like, from a distance"
+        description={`Step back from the individual receipts and the shape of a year appears: ${formatCount(
           data.total,
-        )} recorded moments across ${formatCount(
+        )} moments across ${formatCount(
           data.activeDays,
-        )} active days. Each figure is a deterministic calculation over the dataset — an average of ${data.avgPerDay.toFixed(
+        )} active days — roughly ${data.avgPerDay.toFixed(
           1,
-        )} moments per active day.`}
+        )} for every day you showed up. Everything below is computed from the archive itself, offered as reflection rather than verdict.`}
       />
 
       {/* Headline insight cards */}
@@ -63,15 +63,15 @@ export default function Insights() {
           {summaries.map((s) => (
             <li
               key={s.key}
-              className="relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
+              className="relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-surface)] p-6"
             >
-              <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-ink-soft)]">
+              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-[var(--color-ink-soft)]">
                 {s.title}
               </p>
-              <p className="mt-2 text-xl font-semibold tracking-tight text-[var(--color-ink)]">
+              <p className="mt-3 text-2xl font-bold leading-snug tracking-tight text-[var(--color-ink)]">
                 {s.value}
               </p>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                 {s.detail}
               </p>
             </li>

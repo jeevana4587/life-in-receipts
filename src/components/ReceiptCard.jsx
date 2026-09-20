@@ -25,6 +25,27 @@ import ReasonIcon from './ReasonIcon'
  *   - focus-visible ring is never suppressed (PRD §10.8)
  */
 
+/**
+ * Category visual echo — a 3px left edge whose texture hints at the record's
+ * origin: a perforated slip for purchases, a dashed bracket for photos, a
+ * pulse for music, route ticks for places. Subtle by design; colour, icon,
+ * and label still carry the meaning (Accessibility).
+ */
+function receiptEchoEdge(type, accent) {
+  switch (type) {
+    case 'purchase':
+      return `repeating-linear-gradient(180deg, ${accent} 0 5px, transparent 5px 9px)`
+    case 'photo':
+      return `repeating-linear-gradient(180deg, ${accent}cc 0 9px, transparent 9px 14px)`
+    case 'music':
+      return `repeating-linear-gradient(180deg, ${accent} 0 2px, ${accent}55 2px 4px, transparent 4px 8px)`
+    case 'place':
+      return `repeating-linear-gradient(180deg, transparent 0 6px, ${accent}aa 6px 9px, transparent 9px 15px)`
+    default:
+      return `linear-gradient(180deg, ${accent}bb, ${accent}44)`
+  }
+}
+
 /** One-line, type-aware enrichment shown under the description. */
 function metaLine(receipt) {
   const m = receipt.metadata ?? {}
@@ -96,6 +117,12 @@ function ReceiptCardComponent({
           background: `linear-gradient(90deg, transparent, ${accent}66, transparent)`,
         }}
       />
+      {/* Category visual echo: textured left accent edge */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 left-0 w-[3px]"
+        style={{ background: receiptEchoEdge(receipt.type, accent) }}
+      />
 
       <div className="relative flex items-start gap-3">
         <span
@@ -138,16 +165,17 @@ function ReceiptCardComponent({
           )}
 
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {/* Timestamps use monospace — the raw-telemetry voice */}
             <time
               dateTime={receipt.timestamp}
-              className="text-xs tabular-nums text-[var(--color-ink-soft)]"
+              className="font-mono text-[11px] tabular-nums text-[var(--color-ink-soft)]"
             >
               {focus
                 ? formatDateTime(receipt.timestamp)
                 : formatTime(receipt.timestamp)}
             </time>
             {enrichment && !compact && (
-              <span className="text-xs text-[var(--color-ink-soft)]">
+              <span className="font-mono text-[11px] text-[var(--color-ink-soft)]">
                 {enrichment}
               </span>
             )}

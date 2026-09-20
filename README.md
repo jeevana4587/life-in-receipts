@@ -18,7 +18,7 @@ npm run dev      # start the dev server
 npm run build    # production build
 npm run preview  # preview the production build
 npm run lint     # eslint — zero errors
-npm test         # 35 unit tests (Node built-in test runner, zero deps)
+npm test         # 39 unit tests (Node built-in test runner, zero deps)
 ```
 
 The app is purely frontend: the dataset is a static JSON file imported at build
@@ -30,14 +30,94 @@ time, so there is nothing to configure and no server to run.
 
 | Route             | Screen         | Purpose |
 | ----------------- | -------------- | ------- |
-| `/`               | Landing        | Orients — headline counts, category breakdown, seed moments. |
-| `/journey`        | Journey        | Calendar-heatmap timeline of every moment across the year. |
+| `/`               | Landing        | Opens with an "Archive Initialization" counter, then orients — headline stats, category breakdown, seed moments. |
+| `/journey`        | Journey        | Calendar-heatmap timeline with a glowing "memory thread" spine, chapter markers, and category-tinted ambient backdrop. |
 | `/explore`        | Explore        | Search + multi-filter access to the full receipt set. |
-| `/moment/:id`     | Moment Detail  | One receipt in full, plus its "Connected Moments". |
-| `/story/:id`      | Story / Chapter| A narrative synthesis of the cluster a moment belongs to. |
-| `/insights`       | Insights       | Deterministic patterns computed from the whole dataset. |
+| `/moment/:id`     | Moment Detail  | One receipt in full, its "Connected Moments", and the "Walk This Outing" guided stepping mode. |
+| `/story/:id`      | Story / Chapter| A hedged narrative synthesis of the cluster a moment belongs to. |
+| `/insights`       | Insights       | "The Reflection Room" — conversational, deterministic patterns. |
 
 Every screen is a real URL, so browser-back and deep-linking both work.
+
+### The storytelling flow
+
+```text
+        ┌──────────────────────────────────────────────────────────┐
+        │                     LANDING (orientation)                 │
+        │   archive counter → invitation copy → seed moments       │
+        └──────────────────────────┬───────────────────────────────┘
+                                   │
+             ┌─────────────────────┼─────────────────────┐
+             ▼                     ▼                     ▼
+        ┌─────────┐          ┌──────────┐          ┌──────────┐
+        │ JOURNEY │          │ EXPLORE  │          │ INSIGHTS │
+        │ timeline│          │ search + │          │ reflection│
+        │ + thread│          │ filters  │          │ room      │
+        └────┬────┘          └────┬─────┘          └──────────┘
+             │ select day          │ select card
+             ▼                     ▼
+        ┌─────────────────────────────────┐
+        │        MOMENT DETAIL            │
+        │  focus card + Connected Moments │
+        │  ┌───────────────────────────┐  │
+        │  │ "Walk This Outing" mode   │  │
+        └──────────────┬───────────────────┘
+                       ▼
+        ┌─────────────────────────────────┐
+        │        STORY / CHAPTER          │
+        │  hedged narrative of the cluster│
+        └─────────────────────────────────┘
+```
+
+### System architecture
+
+```text
+  DEVELOPMENT TIME (offline)                    RUNTIME (browser, static)
+  ══════════════════════════                    ══════════════════════════
+
+  raw-data/                                     life-receipts.json
+  ├─ Daily Household ─┐                         │  (imported at build time)
+  │   Transactions.csv│   ┌───────────────┐     ▼
+  ├─ spotify_         ├──▶│ prepareData.js│──▶ src/lib/sanitize.js
+  │   history.csv     │   └───────────────┘    │  validate · normalise ·
+  └─ (excluded:                   ▲            │  de-duplicate · freeze
+      IndiaTransact…    hand-authored           ▼
+      fraud dataset)    entries for 6      src/lib/receipts.js
+                        categories         │  O(1) indexes: byId ·
+                                           │  byLocation · byDay
+                                           ▼
+                           ┌───────────────────────────────┐
+                           │  storyEngine.js               │
+                           │  connections + clusters       │
+                           ├───────────────────────────────┤
+                           │  insights.js · narrative.js   │
+                           │  timeline.js · chapters.js    │
+                           │  filters.js · highlights.js   │
+                           └──────────────┬────────────────┘
+                                          ▼  (memoised pure functions)
+                           ┌───────────────────────────────┐
+                           │  React pages (6 routes)       │
+                           │  ReceiptCard (single card for │
+                           │  all nine categories)         │
+                           └───────────────────────────────┘
+```
+
+### The Story Engine's connection rules (formal hierarchy)
+
+Evaluated in strict priority order, strongest first. A pair's *primary* reason
+is the highest-priority rule that matches it; the UI always displays it.
+
+| Priority | Rule | Window / basis | Surfaced as |
+| -------: | ---- | -------------- | ----------- |
+| 1 | **Explicit link** | `relatedIds` references (dormant — the shipped dataset has none) | "Linked record" |
+| 2 | **Time proximity** | `CONNECTION_WINDOW_MINUTES` = **120 min**, walked outward through the sorted timeline | "35 minutes apart" |
+| 3 | **Location match** | identical normalised `location` string, any date | "Same place · Apex Coffee Roasters" |
+| 4 | **Same calendar day** | same local YYYY-MM-DD key | "Same day" (day summary, not a tight cluster) |
+
+Clustering (`CLUSTER_GAP_MINUTES` = **90 min**) is separate: the maximal run of
+chronologically consecutive receipts whose neighbouring gaps stay within the
+gap. This burst is what Story/Chapter narrates and what "Walk This Outing"
+steps through. Both constants live at the top of `src/lib/storyEngine.js`.
 
 ---
 
@@ -73,6 +153,7 @@ src/
   test/                Unit tests (Node built-in test runner — no deps)
     logic.test.js      Sanitisation + formatting helpers
     story.test.js      Story Engine, filters, insights, narrative, dataset integrity
+    chapters.test.js   Chapter-marker density windows and lookups
 
   data/
     life-receipts.json The static dataset the app imports
@@ -302,7 +383,7 @@ not a reduced feature set.
 
 ### Component testing & reliability
 
-`npm test` runs **35 unit tests** on Node's built-in test runner (zero extra
+`npm test` runs **39 unit tests** on Node's built-in test runner (zero extra
 dependencies), covering:
 
 - the sanitisation boundary (rejection of malformed/unsafe records),
@@ -310,7 +391,8 @@ dependencies), covering:
 - Story Engine connection rules (window bounds, memoisation, self-exclusion),
 - cluster invariants (focus containment, gap limits),
 - filter AND-logic and inclusive date ranges,
-- insights determinism and hedged narrative generation.
+- insights determinism and hedged narrative generation,
+- chapter-marker density windows (non-overlapping, ordered, evocatively titled).
 
 ### Performance (PRD §13.1)
 

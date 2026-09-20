@@ -1,6 +1,12 @@
 import { Link } from 'react-router-dom'
-import { useMemo } from 'react'
-import { ArrowRight, GitBranch, Search, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  ArrowRight,
+  Compass,
+  GitBranch,
+  Search,
+  Sparkles,
+} from 'lucide-react'
 import {
   countByType,
   dateRange,
@@ -28,6 +34,45 @@ export default function Landing() {
   const seeds = useMemo(() => getHighlightMoments(receipts, 6), [])
   const teasers = useMemo(() => insightSummaries().slice(0, 3), [])
 
+  // "Archive Initialization": an ambient counter that tallies recovered
+  // moments before revealing the entry points. Skipped entirely for users
+  // who prefer reduced motion, and dismissible with a click or any key.
+  const [phase, setPhase] = useState(() => {
+    if (typeof window === 'undefined') return 'ready'
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'ready'
+      : 'sealing'
+  })
+  const [tally, setTally] = useState(0)
+
+  useEffect(() => {
+    if (phase !== 'sealing') return undefined
+
+    const duration = 1800
+    const start = performance.now()
+    let frame
+
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration)
+      const eased = 1 - (1 - t) ** 3
+      setTally(Math.round(eased * totalReceipts))
+      if (t < 1) {
+        frame = requestAnimationFrame(tick)
+      } else {
+        setPhase('ready')
+      }
+    }
+
+    frame = requestAnimationFrame(tick)
+    const skip = () => setPhase('ready')
+    window.addEventListener('keydown', skip, { once: true })
+
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('keydown', skip)
+    }
+  }, [phase])
+
   const topCategories = presentTypes
     .map((type) => ({ type, count: countByType[type] }))
     .sort((a, b) => b.count - a.count)
@@ -38,6 +83,49 @@ export default function Landing() {
         '',
       )} – ${formatDate(dateRange.last)}`
     : '—'
+
+  if (phase === 'sealing') {
+    return (
+      <section
+        className="flex min-h-[70svh] flex-col items-center justify-center"
+        aria-live="polite"
+        aria-label="Opening the archive"
+      >
+        <button
+          type="button"
+          onClick={() => setPhase('ready')}
+          className="flex flex-col items-center gap-8 rounded-2xl px-8 py-10 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#c4b5fd]"
+        >
+          <span
+            className="flex h-16 w-16 items-center justify-center rounded-full border-2"
+            style={{
+              borderColor: 'rgba(139,92,246,0.6)',
+              backgroundColor: 'rgba(139,92,246,0.12)',
+              color: '#c4b5fd',
+              boxShadow: '0 0 40px rgba(139,92,246,0.35)',
+            }}
+            aria-hidden="true"
+          >
+            <Compass size={28} strokeWidth={1.5} />
+          </span>
+          <span className="flex flex-col items-center gap-3">
+            <span className="font-mono text-xs uppercase tracking-[0.35em] text-[var(--color-ink-soft)]">
+              Opening the archive
+            </span>
+            <span className="font-mono text-5xl font-bold tabular-nums text-[var(--color-ink)] sm:text-6xl">
+              {tally.toLocaleString()}
+            </span>
+            <span className="font-mono text-xs uppercase tracking-[0.25em] text-[var(--color-ink-soft)]">
+              moments recovered
+            </span>
+          </span>
+          <span className="text-xs text-[var(--color-ink-soft)]">
+            press any key to skip
+          </span>
+        </button>
+      </section>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-12 sm:gap-16">
@@ -58,16 +146,18 @@ export default function Landing() {
         />
 
         <div className="relative max-w-3xl">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#c4b5fd]">
-            A digital life story
+          <p className="mb-3 font-mono text-xs uppercase tracking-[0.25em] text-[#c4b5fd]">
+            Archive · reconstructed
           </p>
           <h1 className="text-3xl font-bold leading-[1.1] tracking-tight text-[var(--color-ink)] sm:text-4xl lg:text-5xl">
             Your Life, In Receipts
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-[var(--color-ink-soft)] sm:text-[17px]">
-            {formatCount(totalReceipts)} recorded moments from a single year,
-            spanning {presentTypes.length} kinds of digital trace. Not a list —
-            a story you can walk through, one connected moment at a time.
+            Every digital transaction, playlist, and note leaves a faint echo.
+            Below is the reconstructed map of your 2017 —{' '}
+            {formatCount(totalReceipts)} moments across {presentTypes.length}{' '}
+            kinds of trace, waiting to be walked through one connected thread
+            at a time.
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-3">
